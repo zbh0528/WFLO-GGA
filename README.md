@@ -135,10 +135,10 @@ Eight real offshore wind farms are included, spanning four countries and a turbi
 
 | # | Site | Country | Turbines | Characteristic |
 |:-:|:-----|:-------:|:--------:|:---------------|
-| 1 | Zhuhai Guishan Hai | China | 20 | Irregular coastal boundary |
+| 1 | Zhuhai Guishan Hai | China | 34 | Irregular coastal boundary |
 | 2 | Egmond aan Zee | Netherlands | 36 | Compact rectangular layout |
-| 3 | Shanghai Lingang | China | 80 | Complex multi-polygon boundary |
-| 4 | Prinses Amaliawindpark | Netherlands | 60 | Regular offshore grid |
+| 3 | Shanghai Lingang | China | 56 | Complex multi-polygon boundary |
+| 4 | Prinses Amaliawindpark | Netherlands | 61 | Regular offshore grid |
 | 5 | Nysted | Denmark | 72 | Large rectangular array |
 | 6 | Sheringham Shoal | UK | 88 | Irregular offshore boundary |
 | 7 | Rodsand II | Denmark | 90 | Curved elongated boundary |
