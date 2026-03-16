@@ -2,7 +2,7 @@
 
 # WFLO-GGA
 
-**A Geometry-guided Genetic Algorithm for Integrated Offshore Wind Farm**  
+**A Geometry-guided Genetic Algorithm for Integrated Offshore Wind Farm**
 **Layout and Electrical Cable Routing Optimization**
 
 *Submitted to Applied Energy*
@@ -22,6 +22,29 @@ This repository provides a unified MATLAB framework for benchmarking metaheurist
 
 ---
 
+## Benchmark Sites
+
+<p align="center">
+  <img src="figures/benchmark_layouts.png" alt="Benchmark wind farm boundaries and layouts" width="90%">
+  <br><em>Figure 1. Boundaries and candidate turbine positions for the 8 benchmark wind farm sites</em>
+</p>
+
+<p align="center">
+  <img src="figures/benchmark_windrose.png" alt="Benchmark wind roses" width="90%">
+  <br><em>Figure 2. Wind roses for the 8 benchmark sites</em>
+</p>
+
+---
+
+## Sample Result
+
+<p align="center">
+  <img src="figures/final_layout.png" alt="Optimized turbine layout and cable routing" width="55%">
+  <br><em>Figure 3. Example optimized turbine layout and cable routing produced by GGA</em>
+</p>
+
+---
+
 ## Highlights
 
 | | |
@@ -30,13 +53,38 @@ This repository provides a unified MATLAB framework for benchmarking metaheurist
 | **Cable routing** | 3 strategies: Balance-Sector (BSR), MST, Sweep |
 | **Benchmark** | 8 real offshore wind farms across 4 countries |
 | **Reproducibility** | Fixed random seeds, full generation history, config snapshots |
-| **Parallelism** | Optional multi-run parallel execution via  |
+| **Parallelism** | Optional multi-run parallel execution via `parfor` |
 
 ---
 
 ## Repository Structure
 
-
+```
+WFLO-GGA/
+├── main.m                      # Main entry point & experiment orchestration
+├── alg/                        # Algorithm implementations
+│   ├── GGA.m                   # ★ Geometry-guided GA (proposed)
+│   ├── GA.m                    # Classical Genetic Algorithm
+│   ├── AGA.m                   # Adaptive Genetic Algorithm
+│   ├── BPSO.m                  # Binary Particle Swarm Optimization
+│   ├── AGPSO.m                 # Adaptive Genetic PSO
+│   ├── BDE.m                   # Ranking/Half-Split Differential Evolution
+│   ├── SaOFGDE.m               # Self-adaptive Fractional-order GDE
+│   ├── DOLSSA.m                # Opposition-based Sparrow Search
+│   ├── RLPS_TLBO.m             # RL Phase-Selection TLBO
+│   └── EJAYA.m                 # Enhanced Jaya Algorithm
+├── utils/
+│   ├── load_problem_poisson.m  # Problem loader (Poisson-disk sampling)
+│   ├── evaluate.m              # LCOE / AEP / CF evaluation
+│   ├── cr_sector.m             # Balance-Sector Routing (BSR)
+│   ├── cr_mst.m                # Minimum Spanning Tree routing
+│   ├── cr_sweep.m              # Sweep-line routing
+│   ├── load_layout.m           # Lat/lon to Cartesian projection
+│   └── unique_fix.m            # Chromosome constraint repair
+├── figures/                    # README figures
+└── data/
+    └── OWF8.qgz                # Compressed wind farm dataset (8 sites)
+```
 
 ---
 
@@ -63,14 +111,14 @@ This repository provides a unified MATLAB framework for benchmarking metaheurist
 
 | # | Site | Country | Turbines | Scale |
 |:-:|:-----|:-------:|:--------:|:-----:|
-| 1 | Zhuhai Guishan Hai | 🇨🇳 China | 20 | Small |
-| 2 | Egmond aan Zee | 🇳🇱 Netherlands | 36 | Small |
-| 3 | Shanghai Lingang | 🇨🇳 China | 80 | Large |
-| 4 | Prinses Amaliawindpark | 🇳🇱 Netherlands | 60 | Medium |
-| 5 | Nysted | 🇩🇰 Denmark | 72 | Medium |
-| 6 | Sheringham Shoal | 🇬🇧 UK | 88 | Large |
-| 7 | Rodsand II | 🇩🇰 Denmark | 90 | Large |
-| 8 | London Array | 🇬🇧 UK | 175 | Extra Large |
+| 1 | Zhuhai Guishan Hai | China | 20 | Small |
+| 2 | Egmond aan Zee | Netherlands | 36 | Small |
+| 3 | Shanghai Lingang | China | 80 | Large |
+| 4 | Prinses Amaliawindpark | Netherlands | 60 | Medium |
+| 5 | Nysted | Denmark | 72 | Medium |
+| 6 | Sheringham Shoal | UK | 88 | Large |
+| 7 | Rodsand II | Denmark | 90 | Large |
+| 8 | London Array | UK | 175 | Extra Large |
 
 > Turbine candidate positions are generated via **Poisson-disk sampling** constrained to each site boundary.
 
@@ -78,17 +126,55 @@ This repository provides a unified MATLAB framework for benchmarking metaheurist
 
 ## Quick Start
 
-### 1. Clone and open in MATLAB
+### Requirements
 
+- MATLAB R2018a or later
+- No external toolboxes required for core functionality
+- Parallel Computing Toolbox (optional, for multi-run parallelism)
 
+### Steps
 
-### 2. Select routing strategy
+**1. Clone the repository**
 
+```bash
+git clone https://github.com/zbh0528/WFLO-GGA.git
+cd WFLO-GGA
+```
 
+**2. Open MATLAB and add to path**
 
-### 3. Select algorithms
+```matlab
+addpath(genpath(pwd));
+```
 
+**3. Configure experiment in `main.m`**
 
+```matlab
+% Select cable routing strategy
+cfg.routing_fn = @cr_sector;   % Balance-Sector Routing (default)
+% cfg.routing_fn = @cr_mst;    % Minimum Spanning Tree
+% cfg.routing_fn = @cr_sweep;  % Sweep-line
+
+% Select algorithms to benchmark
+cfg.algorithms = { @GGA, @GA, @BDE };
+cfg.algonames  = { 'GGA', 'GA', 'BDE' };
+
+% Select wind farm cases
+cfg.case_list = { 'Denmark_Nysted', 'UK_London_Array' };
+
+% Adjust run parameters
+cfg.popsize  = 30;
+cfg.max_it   = 500;
+cfg.runTime  = 10;
+```
+
+**4. Run**
+
+```matlab
+main
+```
+
+Results are saved automatically to `results/results_YYYYMMDD_HHMMSS/`.
 
 ---
 
@@ -96,20 +182,32 @@ This repository provides a unified MATLAB framework for benchmarking metaheurist
 
 | Parameter | Default | Description |
 |:----------|:-------:|:------------|
-|  |  | Population size |
-|  |  | Maximum iterations per run |
-|  |  | Number of independent runs |
-|  |  | Base random seed |
-|  |  | Enable  parallel runs |
-|  |  | Cable routing function handle |
+| `cfg.popsize` | `30` | Population size |
+| `cfg.max_it` | `100` | Maximum iterations per run |
+| `cfg.runTime` | `1` | Number of independent runs |
+| `cfg.base_seed` | `20260316` | Base random seed |
+| `cfg.enable_parallel` | `false` | Enable `parfor` parallel runs |
+| `cfg.routing_fn` | `@cr_sector` | Cable routing function handle |
 
 ---
 
 ## Output Structure
 
+```
+results/
+└── results_YYYYMMDD_HHMMSS/
+    ├── global_run_summary.csv        <- aggregated LCOE across all cases
+    ├── metadata/
+    │   ├── config_snapshot.mat       <- full configuration
+    │   └── environment_info.mat      <- MATLAB version, hardware
+    └── {case_name}/
+        └── {algorithm_name}/
+            ├── run_summary.csv
+            ├── run_N_summary.mat     <- best fitness, success flag
+            └── {algorithm}_runN.mat <- full generation history
+```
 
-
-Each  file stores the complete  struct array with population, fitness, AEP, CF, cable topology, and per-generation timing.
+Each `.mat` file stores the complete `generations` struct array with population, fitness, AEP, CF, cable topology, and per-generation timing.
 
 ---
 
@@ -117,7 +215,15 @@ Each  file stores the complete  struct array with population, fitness, AEP, CF, 
 
 If you use this code or benchmark dataset, please cite:
 
-Need exactly one file argument
+```bibtex
+@article{wflo_gga_2026,
+  title   = {A Geometry-guided Genetic Algorithm for Integrated Offshore Wind Farm
+             Layout and Electrical Cable Routing Optimization},
+  journal = {Applied Energy},
+  year    = {2026},
+  note    = {Under review}
+}
+```
 
 ---
 
