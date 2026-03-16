@@ -1,0 +1,23 @@
+# MATLAB temporary files
+*.asv
+*.m~
+
+# MATLAB data
+*.mat
+
+# Figures
+*.fig
+*.png
+*.jpg
+
+# Logs
+*.log
+
+# Results folders
+results/
+output/
+runs/
+
+# OS files
+.DS_Store
+Thumbs.db
