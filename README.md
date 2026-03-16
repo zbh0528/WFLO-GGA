@@ -274,15 +274,6 @@ results/
 
 If you use this platform, dataset, or any algorithm implementation in your research, please cite:
 
-```bibtex
-@article{wflo_gga_2026,
-  title   = {A Geometry-guided Genetic Algorithm for Integrated Offshore Wind Farm
-             Layout and Electrical Cable Routing Optimization},
-  journal = {Applied Energy},
-  year    = {2026},
-  note    = {Under review}
-}
-```
 
 ---
 
