@@ -53,23 +53,23 @@ The platform is organized as a layered evaluation pipeline. Optimization algorit
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│              Optimization Algorithm Layer            │
-│   GGA · GA · AGA · BPSO · AGPSO · BDE · SaOFGDE    │
+│              Optimization Algorithm Layer           │
+│   GGA · GA · AGA · BPSO · AGPSO · BDE · SaOFGDE     │
 │              DOLSSA · RLPS_TLBO · EJAYA             │
 └────────────────────────┬────────────────────────────┘
                          │  candidate layout (turbine indices)
                          ▼
 ┌─────────────────────────────────────────────────────┐
-│               Cable Routing Layer                    │
-│   cr_sector (BSR)  ·  cr_mst  ·  cr_sweep          │
+│               Cable Routing Layer                   │
+│   cr_sector (BSR)  ·  cr_mst  ·  cr_sweep           │
 │   → cable topology, segment lengths, current loads  │
 └────────────────────────┬────────────────────────────┘
                          │  cable struct
                          ▼
 ┌─────────────────────────────────────────────────────┐
-│               Objective Evaluation Layer             │
-│                    evaluate.m                        │
-│   Wake model → AEP → CAPEX + OPEX → LCOE           │
+│               Objective Evaluation Layer            │
+│                    evaluate.m                       │
+│   Wake model → AEP → CAPEX + OPEX → LCOE            │
 └─────────────────────────────────────────────────────┘
 ```
 
