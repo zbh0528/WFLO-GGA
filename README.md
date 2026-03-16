@@ -150,14 +150,6 @@ Each .mat file stores the complete generations cell array, including population,
 
 If you use this code or benchmark dataset in your research, please cite:
 
-```bibtex
-@article{wflo_gga_2026,
-  title   = {A Geometry-guided Genetic Algorithm for Integrated Offshore Wind Farm Layout and Electrical Cable Routing Optimization},
-  journal = {Applied Energy},
-  year    = {2026},
-  note    = {Under review}
-}
-```
 
 ---
 
