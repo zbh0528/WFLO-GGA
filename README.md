@@ -2,8 +2,8 @@
 
 # WFLO-GGA
 
-**A Geometry-guided Genetic Algorithm for Integrated Offshore Wind Farm**
-**Layout and Electrical Cable Routing Optimization**
+**An Engineering Optimization Platform for Integrated Offshore Wind Farm**
+**Layout and Electrical Cable Routing**
 
 *Submitted to Applied Energy*
 
@@ -18,77 +18,139 @@
 
 ## Overview
 
-This repository provides a unified MATLAB framework for benchmarking metaheuristic algorithms on the **integrated wind farm layout and cable routing optimization** problem. All algorithms minimize **Levelized Cost of Energy (LCOE)** over a 25-year horizon using the Jensen wake model, evaluated on 8 real offshore wind farm sites with three interchangeable cable routing strategies.
+Offshore wind farm development involves two tightly coupled engineering decisions: **where to place turbines** within a geographically constrained site, and **how to connect them** via submarine cable networks. Optimizing these decisions jointly—rather than sequentially—can meaningfully reduce the Levelized Cost of Energy (LCOE), but requires a platform that faithfully models the physical, electrical, and economic realities of real projects.
+
+This repository provides such a platform. It couples a physics-based wake and power model with a detailed CAPEX/OPEX cost model and three electrical cable routing strategies, grounded in a benchmark dataset of **8 real offshore wind farm sites**. Ten metaheuristic optimization algorithms are implemented as interchangeable solvers within this shared evaluation environment, enabling controlled, reproducible comparisons under consistent engineering assumptions.
 
 ---
 
 ## Benchmark Sites
 
 <p align="center">
-  <img src="figures/benchmark_layouts.png" alt="Benchmark wind farm boundaries and layouts" width="90%">
-  <br><em>Figure 1. Boundaries and candidate turbine positions for the 8 benchmark wind farm sites</em>
+  <img src="figures/benchmark_layouts.png" alt="Benchmark wind farm boundaries and candidate layouts" width="90%">
+  <br><em>Figure 1. Geographic boundaries and Poisson-disk-sampled candidate turbine positions for the 8 benchmark sites</em>
 </p>
 
 <p align="center">
-  <img src="figures/benchmark_windrose.png" alt="Benchmark wind roses" width="90%">
-  <br><em>Figure 2. Wind roses for the 8 benchmark sites</em>
+  <img src="figures/benchmark_windrose.png" alt="Wind roses for the 8 benchmark sites" width="90%">
+  <br><em>Figure 2. Directional wind speed distributions for the 8 benchmark sites</em>
 </p>
 
 ---
 
-## Sample Result
+## Optimized Layout Example
 
 <p align="center">
   <img src="figures/final_layout.png" alt="Optimized turbine layout and cable routing" width="55%">
-  <br><em>Figure 3. Example optimized turbine layout and cable routing produced by GGA</em>
+  <br><em>Figure 3. Optimized turbine placement and Balance-Sector cable routing produced by GGA on a representative site</em>
 </p>
 
 ---
 
-## Highlights
+## Platform Architecture
 
-| | |
-|---|---|
-| **Algorithms** | 10 metaheuristic methods (genetic, swarm, DE, learning-based) |
-| **Cable routing** | 3 strategies: Balance-Sector (BSR), MST, Sweep |
-| **Benchmark** | 8 real offshore wind farms across 4 countries |
-| **Reproducibility** | Fixed random seeds, full generation history, config snapshots |
-| **Parallelism** | Optional multi-run parallel execution via `parfor` |
+The platform is organized as a layered evaluation pipeline. Optimization algorithms interact only with the top-level interface; all engineering models are encapsulated in the evaluation stack.
+
+```
+┌─────────────────────────────────────────────────────┐
+│              Optimization Algorithm Layer            │
+│   GGA · GA · AGA · BPSO · AGPSO · BDE · SaOFGDE    │
+│              DOLSSA · RLPS_TLBO · EJAYA             │
+└────────────────────────┬────────────────────────────┘
+                         │  candidate layout (turbine indices)
+                         ▼
+┌─────────────────────────────────────────────────────┐
+│               Cable Routing Layer                    │
+│   cr_sector (BSR)  ·  cr_mst  ·  cr_sweep          │
+│   → cable topology, segment lengths, current loads  │
+└────────────────────────┬────────────────────────────┘
+                         │  cable struct
+                         ▼
+┌─────────────────────────────────────────────────────┐
+│               Objective Evaluation Layer             │
+│                    evaluate.m                        │
+│   Wake model → AEP → CAPEX + OPEX → LCOE           │
+└─────────────────────────────────────────────────────┘
+```
+
+Each algorithm receives a single scalar fitness value (LCOE) and has no direct access to the physical or electrical models, ensuring all comparisons reflect algorithmic performance under identical engineering conditions.
 
 ---
 
-## Repository Structure
+## Physical & Economic Model
+
+### Wake Model
+
+Turbine interactions are computed using the **Jensen (top-hat) wake model**:
+
+- Thrust coefficient: *C*_T = 0.8
+- Wake decay constant: *k* = 0.04 (offshore)
+- Multiple wake superposition via quadratic velocity deficit addition
+
+### Power Model
+
+Turbine output is interpolated from a **manufacturer power curve** (cut-in 3 m/s, rated 4.2 MW at 13 m/s, cut-out 25 m/s) accounting for wake-reduced inflow speed at each turbine for each wind direction sector.
+
+### Cost Model (25-year LCOE)
+
+| Component | Model |
+|:----------|:------|
+| Turbine CAPEX | Unit cost × rated capacity |
+| Foundation & installation | Uniform per-turbine cost (depth-independent) |
+| Inter-array cables | Length × unit cost, typed by current load (3 grades) |
+| Export cable | Fixed per-site |
+| O&M | Annual percentage of CAPEX |
+| Decommissioning | Terminal lump sum |
+| Discount rate | 5% |
+
+> Foundation costs are modeled as spatially uniform to ensure cross-site algorithmic comparability. The framework accepts depth-dependent cost functions when bathymetric data are available.
+
+### Annual Energy Production
+
+AEP integrates over the site wind rose (16 directional sectors × wind speed bins), applying the wake-reduced power curve at each turbine:
 
 ```
-WFLO-GGA/
-├── main.m                      # Main entry point & experiment orchestration
-├── alg/                        # Algorithm implementations
-│   ├── GGA.m                   # ★ Geometry-guided GA (proposed)
-│   ├── GA.m                    # Classical Genetic Algorithm
-│   ├── AGA.m                   # Adaptive Genetic Algorithm
-│   ├── BPSO.m                  # Binary Particle Swarm Optimization
-│   ├── AGPSO.m                 # Adaptive Genetic PSO
-│   ├── BDE.m                   # Ranking/Half-Split Differential Evolution
-│   ├── SaOFGDE.m               # Self-adaptive Fractional-order GDE
-│   ├── DOLSSA.m                # Opposition-based Sparrow Search
-│   ├── RLPS_TLBO.m             # RL Phase-Selection TLBO
-│   └── EJAYA.m                 # Enhanced Jaya Algorithm
-├── utils/
-│   ├── load_problem_poisson.m  # Problem loader (Poisson-disk sampling)
-│   ├── evaluate.m              # LCOE / AEP / CF evaluation
-│   ├── cr_sector.m             # Balance-Sector Routing (BSR)
-│   ├── cr_mst.m                # Minimum Spanning Tree routing
-│   ├── cr_sweep.m              # Sweep-line routing
-│   ├── load_layout.m           # Lat/lon to Cartesian projection
-│   └── unique_fix.m            # Chromosome constraint repair
-├── figures/                    # README figures
-└── data/
-    └── OWF8.qgz                # Compressed wind farm dataset (8 sites)
+AEP = Σ_d Σ_v  f(d,v) · P_wake(layout, d, v) · 8760
 ```
 
 ---
 
-## Algorithms
+## Electrical Cable Routing
+
+Three routing strategies are provided as drop-in modules, all subject to the same **current-capacity constraints** (33 kV inter-array voltage, three cable grades):
+
+| Strategy | Description | Characteristic |
+|:---------|:------------|:---------------|
+| **Balance-Sector (BSR)** | Partitions turbines into angular sectors relative to the substation; builds a capacity-constrained MST per sector | Spatial locality, low imbalance |
+| **MST** | Global minimum spanning tree with capacity-constraint repair | Minimum total cable length |
+| **Sweep** | Sweep-line sector assignment with sequential cable loading | Fast, geometry-aware |
+
+Routing is called once per candidate layout evaluation and returns the full cable topology, segment lengths, cable grades, and total cable CAPEX.
+
+---
+
+## Benchmark Dataset
+
+Eight real offshore wind farms are included, spanning four countries and a turbine count range of 20–175:
+
+| # | Site | Country | Turbines | Characteristic |
+|:-:|:-----|:-------:|:--------:|:---------------|
+| 1 | Zhuhai Guishan Hai | China | 20 | Irregular coastal boundary |
+| 2 | Egmond aan Zee | Netherlands | 36 | Compact rectangular layout |
+| 3 | Shanghai Lingang | China | 80 | Complex multi-polygon boundary |
+| 4 | Prinses Amaliawindpark | Netherlands | 60 | Regular offshore grid |
+| 5 | Nysted | Denmark | 72 | Large rectangular array |
+| 6 | Sheringham Shoal | UK | 88 | Irregular offshore boundary |
+| 7 | Rodsand II | Denmark | 90 | Curved elongated boundary |
+| 8 | London Array | UK | 175 | Large-scale complex site |
+
+**Site data includes**: geographic boundary polygons, directional wind speed distributions (16 sectors), and site-specific electrical parameters. Turbine candidate positions are generated via **Poisson-disk sampling** to ensure minimum spacing compliance while providing uniform spatial coverage.
+
+---
+
+## Algorithm Suite
+
+Ten metaheuristic algorithms are implemented as interchangeable solvers. All use the same chromosome encoding (a vector of *M* distinct candidate-point indices), the same evaluation pipeline, and the same initial population when provided.
 
 | Algorithm | Category | Key Mechanism |
 |:----------|:---------|:--------------|
@@ -103,24 +165,33 @@ WFLO-GGA/
 | RLPS_TLBO | Learning-based | Q-learning phase selection in TLBO |
 | EJAYA | Learning-based | Enhanced Jaya with attraction / repulsion dynamics |
 
-> All algorithms share an identical function signature and evaluation pipeline for fair comparison.
-
 ---
 
-## Benchmark Wind Farms
+## Repository Structure
 
-| # | Site | Country | Turbines | Scale |
-|:-:|:-----|:-------:|:--------:|:-----:|
-| 1 | Zhuhai Guishan Hai | China | 20 | Small |
-| 2 | Egmond aan Zee | Netherlands | 36 | Small |
-| 3 | Shanghai Lingang | China | 80 | Large |
-| 4 | Prinses Amaliawindpark | Netherlands | 60 | Medium |
-| 5 | Nysted | Denmark | 72 | Medium |
-| 6 | Sheringham Shoal | UK | 88 | Large |
-| 7 | Rodsand II | Denmark | 90 | Large |
-| 8 | London Array | UK | 175 | Extra Large |
-
-> Turbine candidate positions are generated via **Poisson-disk sampling** constrained to each site boundary.
+```
+WFLO-GGA/
+├── main.m                      # Experiment orchestration entry point
+├── alg/                        # Optimization algorithm implementations
+│   ├── GGA.m                   # ★ Proposed method
+│   ├── GA.m / AGA.m            # Genetic algorithm variants
+│   ├── BPSO.m / AGPSO.m        # Swarm intelligence variants
+│   ├── BDE.m / SaOFGDE.m       # Differential evolution variants
+│   ├── DOLSSA.m                # Sparrow search variant
+│   ├── RLPS_TLBO.m             # Teaching-learning variant
+│   └── EJAYA.m                 # Jaya variant
+├── utils/
+│   ├── evaluate.m              # LCOE / AEP / CF evaluation (core model)
+│   ├── cr_sector.m             # Balance-Sector Routing (BSR)
+│   ├── cr_mst.m                # Minimum Spanning Tree routing
+│   ├── cr_sweep.m              # Sweep-line routing
+│   ├── load_problem_poisson.m  # Site loader + Poisson-disk sampling
+│   ├── load_layout.m           # Lat/lon to Cartesian projection
+│   └── unique_fix.m            # Chromosome feasibility repair
+├── figures/                    # README figures
+└── data/
+    └── OWF8.qgz                # Compressed benchmark dataset (8 sites)
+```
 
 ---
 
@@ -150,22 +221,23 @@ addpath(genpath(pwd));
 **3. Configure experiment in `main.m`**
 
 ```matlab
-% Select cable routing strategy
+% Choose cable routing strategy
 cfg.routing_fn = @cr_sector;   % Balance-Sector Routing (default)
 % cfg.routing_fn = @cr_mst;    % Minimum Spanning Tree
 % cfg.routing_fn = @cr_sweep;  % Sweep-line
 
-% Select algorithms to benchmark
+% Choose algorithms
 cfg.algorithms = { @GGA, @GA, @BDE };
 cfg.algonames  = { 'GGA', 'GA', 'BDE' };
 
-% Select wind farm cases
+% Choose wind farm sites
 cfg.case_list = { 'Denmark_Nysted', 'UK_London_Array' };
 
-% Adjust run parameters
-cfg.popsize  = 30;
-cfg.max_it   = 500;
-cfg.runTime  = 10;
+% Set run parameters
+cfg.popsize  = 30;    % population size
+cfg.max_it   = 500;   % iterations per run
+cfg.runTime  = 10;    % independent runs per case
+cfg.base_seed = 42;   % random seed for reproducibility
 ```
 
 **4. Run**
@@ -174,20 +246,7 @@ cfg.runTime  = 10;
 main
 ```
 
-Results are saved automatically to `results/results_YYYYMMDD_HHMMSS/`.
-
----
-
-## Configuration Reference
-
-| Parameter | Default | Description |
-|:----------|:-------:|:------------|
-| `cfg.popsize` | `30` | Population size |
-| `cfg.max_it` | `100` | Maximum iterations per run |
-| `cfg.runTime` | `1` | Number of independent runs |
-| `cfg.base_seed` | `20260316` | Base random seed |
-| `cfg.enable_parallel` | `false` | Enable `parfor` parallel runs |
-| `cfg.routing_fn` | `@cr_sector` | Cable routing function handle |
+Results are saved to `results/results_YYYYMMDD_HHMMSS/`.
 
 ---
 
@@ -196,24 +255,34 @@ Results are saved automatically to `results/results_YYYYMMDD_HHMMSS/`.
 ```
 results/
 └── results_YYYYMMDD_HHMMSS/
-    ├── global_run_summary.csv        <- aggregated LCOE across all cases
+    ├── global_run_summary.csv        <- LCOE across all cases and algorithms
     ├── metadata/
-    │   ├── config_snapshot.mat       <- full configuration
-    │   └── environment_info.mat      <- MATLAB version, hardware
-    └── {case_name}/
-        └── {algorithm_name}/
+    │   ├── config_snapshot.mat       <- full experiment configuration
+    │   └── environment_info.mat      <- MATLAB version, hardware info
+    └── {site_name}/
+        └── {algorithm}/
             ├── run_summary.csv
-            ├── run_N_summary.mat     <- best fitness, success flag
-            └── {algorithm}_runN.mat <- full generation history
+            ├── run_N_summary.mat     <- best LCOE, AEP, CF per run
+            └── {algorithm}_runN.mat <- complete generation history:
+                                        population, fitness, AEP, CF,
+                                        cable topology, timing breakdown
 ```
-
-Each `.mat` file stores the complete `generations` struct array with population, fitness, AEP, CF, cable topology, and per-generation timing.
 
 ---
 
 ## Citation
 
-If you use this code or benchmark dataset, please cite:
+If you use this platform, dataset, or any algorithm implementation in your research, please cite:
+
+```bibtex
+@article{wflo_gga_2026,
+  title   = {A Geometry-guided Genetic Algorithm for Integrated Offshore Wind Farm
+             Layout and Electrical Cable Routing Optimization},
+  journal = {Applied Energy},
+  year    = {2026},
+  note    = {Under review}
+}
+```
 
 ---
 
