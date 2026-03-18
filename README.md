@@ -214,6 +214,8 @@ cfg.algonames  = { 'GGA', 'MyAlg' };
 
 The platform automatically handles output directory creation, result saving, seeding, and summary aggregation.
 
+> **Porting algorithms from PlatEMO**: [PlatEMO](https://github.com/BIMK/PlatEMO) is a MATLAB-based evolutionary optimization platform that provides reference implementations of 150+ metaheuristic algorithms. To port an algorithm from PlatEMO, extract its core update logic (population evolution step) and wrap it in the function signature above. The key adaptation is replacing PlatEMO's internal fitness calls with `evaluate(wf, turbine, routing_fn(...), coords)`, and mapping PlatEMO's solution representation to the integer-index chromosome encoding used here.
+
 ### Swapping the Turbine Model
 
 The turbine is defined in two places: a **CSV power/thrust table** and a set of **scalar parameters** in `load_problem_poisson.m`.
