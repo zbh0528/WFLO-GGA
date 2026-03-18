@@ -26,9 +26,13 @@
   - [Geometry-guided Crossover (G-crossover)](#geometry-guided-crossover-g-crossover)
   - [Balance-Sector Routing (BSR)](#balance-sector-routing-bsr)
 - [Algorithm Suite](#algorithm-suite)
+- [Experimental Design & Fairness Protocol](#experimental-design--fairness-protocol)
 - [Extending the Platform](#extending-the-platform)
   - [Adding a New Algorithm](#adding-a-new-algorithm)
+  - [Warm-Start and Population Transfer](#warm-start-and-population-transfer)
+  - [Multi-Routing Comparison Workflow](#multi-routing-comparison-workflow)
   - [Swapping the Turbine Model](#swapping-the-turbine-model)
+  - [Configuring the Substation Position](#configuring-the-substation-position)
   - [Enabling Spatially Varying Bathymetry](#enabling-spatially-varying-bathymetry)
   - [Replacing the Wake Model](#replacing-the-wake-model)
   - [Refining Wind Resource Discretization](#refining-wind-resource-discretization)
@@ -37,6 +41,7 @@
 - [Quick Start](#quick-start)
 - [Reproducing Paper Results](#reproducing-paper-results)
 - [Output Structure](#output-structure)
+- [Post-Processing & Analysis](#post-processing--analysis)
 - [Optimized Layout Example](#optimized-layout-example)
 - [Data Sources & Acknowledgments](#data-sources--acknowledgments)
 - [Citation](#citation)
@@ -174,6 +179,37 @@ All competitor algorithms use hyperparameter values from their original publicat
 
 ---
 
+## Experimental Design & Fairness Protocol
+
+All ten algorithms compete under three structural guarantees enforced by `main.m`, ensuring that observed LCOE differences reflect algorithmic behavior rather than initialization or modeling artifacts:
+
+| Guarantee | Mechanism |
+|:----------|:----------|
+| **Shared candidate set** | Poisson-disk sampling is seeded with `cfg.base_seed` before any algorithm runs. All algorithms search within the same *N* candidate positions. |
+| **Shared initial population** | `Pop0` is generated once per site via `prepare_initial_population()` and passed identically to every algorithm. No algorithm benefits from a more favorable starting configuration. |
+| **Shared evaluation pipeline** | All algorithms call the same `evaluate.m` → `routing_fn` stack. There are no algorithm-specific model simplifications. |
+
+The execution order within `main.m` enforces this:
+
+```matlab
+% 1. Load site and generate candidate set (shared, seeded)
+[wf, turbine] = load_problem_poisson(case_name);
+
+% 2. Generate initial population (shared across all algorithms)
+[Pop0_all, wf] = prepare_initial_population(cfg, wf, turbine, case_name, runTime, popsize);
+
+% 3. Run all algorithms on the same problem instance
+for each algorithm
+    for r = 1:runTime
+        feval(alg, wf, turbine, max_it, r, popsize, algname, results_dir, Pop0_all{r}, routing_fn);
+    end
+end
+```
+
+This design means the benchmark results in the paper are directly comparable: any algorithm that outperforms another does so on the same candidate set, same starting layouts, and same physical model.
+
+---
+
 ## Extending the Platform
 
 ### Adding a New Algorithm
@@ -197,13 +233,14 @@ function best_fit = MyAlg(wf, turbine, max_it, runtime, popsize, algname, result
 %   best_fit    - best LCOE achieved (scalar, $/MWh; lower is better)
 %
 % Chromosome encoding:
-%   Each individual is a length-M integer vector of distinct indices in [1, wf.N].
-%   Index k selects candidate position wf.coords(k, :) as a turbine location.
-%   Use unique_fix(ind, wf.N) to repair infeasible chromosomes after crossover/mutation.
+%   Each individual is a length-M integer vector of distinct indices in [1, wf.N_candidate].
+%   Index k selects candidate position wf.candidate_points(k, :) as a turbine location.
+%   Use unique_fix(ind, wf.N_candidate) to repair infeasible chromosomes after crossover/mutation.
 %
 % Fitness evaluation:
-%   cable  = routing_fn(wf.coords(ind, :), wf);
-%   [lcoe] = evaluate(wf, turbine, cable, wf.coords(ind, :));
+%   coords = wf.candidate_points(ind, :);
+%   cable  = routing_fn(coords, wf);
+%   [lcoe] = evaluate(wf, turbine, cable, coords);
 ```
 
 Then register it in `main.m`:
@@ -213,9 +250,44 @@ cfg.algorithms = { @GGA, @MyAlg };
 cfg.algonames  = { 'GGA', 'MyAlg' };
 ```
 
-The platform automatically handles output directory creation, result saving, seeding, and summary aggregation.
+> **Porting algorithms from PlatEMO**: [PlatEMO](https://github.com/BIMK/PlatEMO) is a MATLAB-based evolutionary optimization platform that provides reference implementations of 150+ metaheuristic algorithms. To port an algorithm from PlatEMO, extract its core population update logic and wrap it in the function signature above. The key adaptation is replacing PlatEMO's internal fitness calls with `evaluate(wf, turbine, routing_fn(...), coords)`, and mapping PlatEMO's solution representation to the integer-index chromosome encoding used here.
 
-> **Porting algorithms from PlatEMO**: [PlatEMO](https://github.com/BIMK/PlatEMO) is a MATLAB-based evolutionary optimization platform that provides reference implementations of 150+ metaheuristic algorithms. To port an algorithm from PlatEMO, extract its core update logic (population evolution step) and wrap it in the function signature above. The key adaptation is replacing PlatEMO's internal fitness calls with `evaluate(wf, turbine, routing_fn(...), coords)`, and mapping PlatEMO's solution representation to the integer-index chromosome encoding used here.
+### Warm-Start and Population Transfer
+
+By default, `main.m` generates a random initial population. It also supports **warm-start initialization**: loading a population from a previous experiment as the starting point for a new run. This is useful for continuing interrupted experiments, transferring knowledge across sites, or seeding with domain-informed layouts.
+
+Three configuration flags control this behavior:
+
+```matlab
+cfg.use_history_pop0                   = true;   % enable warm-start (default: true)
+cfg.history_root                       = fullfile(project_root, 'Results');  % search path
+cfg.allow_history_wf_override          = true;   % reuse candidate set from history session
+cfg.allow_random_init_when_history_missing = true;  % fall back to random if no history found
+```
+
+When `cfg.use_history_pop0 = true`, the platform searches `cfg.history_root/{case_name}/` for `.mat` files from a previous run, extracts the final population, and uses it as `Pop0` for the new experiment. A `history_init_report.txt` is written to the output directory recording which history file was used (or why fallback occurred).
+
+**Cross-site population transfer**: set `cfg.history_root` to point to results from a different site. The platform will attempt to map the historical population to the new candidate set, enabling transfer-learning-style initialization across wind farms.
+
+### Multi-Routing Comparison Workflow
+
+To reproduce Table 6 (BSR vs. Sweep cable cost comparison) or to compare any pair of routing strategies on the same algorithm, run two experiments that differ only in `cfg.routing_fn`:
+
+```matlab
+% Run 1: Balance-Sector Routing
+cfg.routing_fn = @cr_sector;
+cfg.algorithms = { @GGA };
+cfg.algonames  = { 'GGA' };
+cfg.case_list  = { 'UK_London_Array' };
+cfg.popsize = 30; cfg.max_it = 100; cfg.runTime = 30; cfg.base_seed = 42;
+main   % saves to results/results_YYYYMMDD_HHMMSS_bsr/
+
+% Run 2: Sweep routing (identical config, different routing_fn)
+cfg.routing_fn = @cr_sweep;
+main   % saves to results/results_YYYYMMDD_HHMMSS_sweep/
+```
+
+Because both runs share the same `cfg.base_seed`, they use identical candidate sets and initial populations. The cable cost difference in `global_run_summary.csv` is therefore attributable solely to the routing strategy. To compare all three routing strategies, run the same block a third time with `cfg.routing_fn = @cr_mst`.
 
 ### Swapping the Turbine Model
 
@@ -235,7 +307,7 @@ speed_m_s,  power_kW,  Ct
 **Step 2 — Update the turbine block** in `load_problem_poisson.m`:
 
 ```matlab
-turbine_file = './data/turbine/MyTurbine_6MW.csv';   % point to new CSV
+turbine_file = './data/turbine/MyTurbine_6MW.csv';
 
 turbine.Pinst          = 6000;    % rated power (kW)
 turbine.hub_height     = 105.0;   % hub height (m)
@@ -255,6 +327,23 @@ turbine.CutOut         = 25.0;    % cut-out wind speed (m/s)
 | Turbine CAPEX | Re-computed from `log(Pinst/1000)` cost curve |
 
 No algorithm or routing code requires modification; all use `turbine` and `wf` as opaque structs.
+
+### Configuring the Substation Position
+
+The offshore substation is currently placed at the centroid of the original turbine layout:
+
+```matlab
+wf.substation = mean(layout0, 1);   % in load_problem_poisson.m
+```
+
+To test a different substation location, override this field after the site is loaded:
+
+```matlab
+[wf, turbine] = load_problem_poisson('UK_London_Array');
+wf.substation = [x_coord, y_coord];   % Cartesian metres, same projection as wf.candidate_points
+```
+
+The substation position affects both the G-crossover operator (the half-plane partition line passes through it) and all three routing strategies (cable strings are rooted at it). Varying the substation position is therefore a meaningful sensitivity study and a natural extension of the joint optimization problem.
 
 ### Enabling Spatially Varying Bathymetry
 
@@ -298,7 +387,6 @@ toC = (C_W + C_ist) * T + 1.5 * sum(C_f_vec);
 The wake model is implemented as the local function `jensen_model` inside `utils/evaluate.m`, and is called once per wind direction sector per wind speed bin:
 
 ```matlab
-% Inside evaluate.m — the critical call site:
 R   = [cos(th) -sin(th); sin(th) cos(th)];
 rot = R * pos;                          % rotate layout so wind blows along +y axis
 ws  = jensen_model(rot, turbine, v);    % ← replace this line to swap wake models
@@ -318,45 +406,34 @@ function ws = my_wake_model(pos, turbine, U0)
 %   ws      - T×1 vector of effective wind speeds (m/s) at each turbine
 ```
 
-**To substitute a different model** (e.g. Gaussian, Frandsen, LES-surrogate):
-
-1. Create `utils/my_wake_model.m` implementing the interface above.
-2. In `utils/evaluate.m`, replace the single line `ws = jensen_model(...)` with `ws = my_wake_model(...)`.
-
-No other files need to be modified. All ten algorithms, three routing strategies, and all eight benchmark sites will automatically use the new wake model.
+To substitute a different model (e.g. Gaussian, Frandsen, LES-surrogate): create `utils/my_wake_model.m` and replace the single line `ws = jensen_model(...)` in `evaluate.m`. No other files need to be modified.
 
 > **Current model**: Jensen (top-hat) wake, thrust coefficient C_T = 0.8, linear wake expansion with decay constant k = 0.04, quadratic superposition of velocity deficits.
 
 ### Refining Wind Resource Discretization
 
-The benchmark wind data uses **12 directional sectors × 4 wind speed bins** per site (30° angular resolution, derived from the Global Wind Atlas). The AEP integration in `evaluate.m` is fully resolution-agnostic:
+The benchmark wind data uses **12 directional sectors × 4 wind speed bins** per site (30° angular resolution, derived from the Global Wind Atlas). The AEP integration in `evaluate.m` is fully resolution-agnostic — the double loop iterates over `length(wf.theta)` directions and `length(wf.velocity)` speed bins, so increasing either dimension requires no code change.
+
+**To use a finer wind rose**, replace the site's `.mat` file with one containing higher-resolution arrays:
 
 ```matlab
-AEP = Σ_d Σ_v  f(d, v) · P_wake(layout, d, v) · 8760
-```
-
-The double loop iterates over `length(wf.theta)` directions and `length(wf.velocity)` speed bins, so increasing either dimension requires no code change.
-
-**To use a finer wind rose**, replace the site's `.mat` file with one that contains higher-resolution arrays:
-
-```matlab
-% Current benchmark resolution (from Global Wind Atlas):
-wf.theta     = linspace(0, 2*pi*(11/12), 12)';   % 12 sectors, 30° spacing
+% Current benchmark (12 × 4):
+wf.theta     = linspace(0, 2*pi*(11/12), 12)';   % 30° spacing
 wf.velocity  = [5; 8; 11; 14];                    % 4 speed bins (m/s)
-wf.f_theta_v = ...;  % 12 × 4 joint probability matrix, rows sum to 1
+wf.f_theta_v = ...;   % 12 × 4 joint probability, rows sum to 1
 
-% Example: refined to 36 sectors × 10 speed bins (10° spacing, 1 m/s resolution):
+% Example: 36 sectors × 10 speed bins (10° spacing):
 wf.theta     = linspace(0, 2*pi*(35/36), 36)';
-wf.velocity  = (3:1:25)';
-wf.f_theta_v = ...;  % 36 × 23 joint probability matrix
+wf.velocity  = (3:2:21)';
+wf.f_theta_v = ...;   % 36 × 10 joint probability
 ```
 
-**Computational trade-off**: evaluation cost scales linearly with `n_sectors × n_bins`, since the wake calculation runs once per (direction, speed) pair. For large wind farms (T > 100 turbines) or long optimization runs, the default 12 × 4 resolution offers a practical balance between AEP accuracy and runtime. Finer discretizations are recommended for post-hoc validation of the best layout rather than for the optimization loop itself.
+**Computational trade-off**: evaluation cost scales linearly with `n_sectors × n_bins`. For large wind farms (T > 100) or long runs, the default 12 × 4 resolution offers a practical balance between AEP accuracy and runtime. Finer discretizations are recommended for post-hoc validation of the best layout rather than the optimization loop itself.
 
 **Wind data sources for refinement**:
-- [Global Wind Atlas](https://globalwindatlas.info) — provides site-specific wind roses at up to 36-sector resolution via web export
+- [Global Wind Atlas](https://globalwindatlas.info) — site-specific wind roses at up to 36-sector resolution via web export
 - [ERA5 reanalysis](https://doi.org/10.24381/cds.adbb2d47) — hourly time series that can be binned to arbitrary (direction, speed) resolution
-- Site measurement data — if available, replace the `.mat` file entirely with measured distributions
+- Site measurement data — replace the `.mat` file with measured distributions
 
 ### Adding a New Wind Farm Site
 
@@ -366,15 +443,13 @@ wf.f_theta_v = ...;  % 36 × 23 joint probability matrix
 |:-----|:---------|:-------|
 | Boundary polygon | `data/layout/SiteName.geojson` | GeoJSON FeatureCollection with one Polygon |
 | Turbine positions | `data/layout/SiteName.csv` | Columns: `centr_lat`, `centr_lon`, `country` (WGS84) |
-| Wind resource | `data/wind/SiteName.mat` | Variables: `theta` (16×1 rad), `velocity` (Nv×1 m/s), `f_theta_v` (16×Nv probability) |
+| Wind resource | `data/wind/SiteName.mat` | Variables: `theta` (Nd×1 rad), `velocity` (Nv×1 m/s), `f_theta_v` (Nd×Nv probability) |
 
 **Step 2 — Add a case block in `load_problem_poisson.m`** following the pattern of any existing site. Key fields to set:
 
 ```matlab
-wf.M               % number of turbines to place (integer)
-wf.cable_capacity  % maximum turbines per cable string (typically 8-10)
 wf.sea_depth       % mean water depth in metres (affects foundation cost)
-wf.export_cable    % export cable cost (fixed, $)
+wf.offshore_length % export cable route length (m)
 wf.innercable_price % [price_grade1, price_grade2, price_grade3] ($/m)
 ```
 
@@ -408,7 +483,7 @@ WFLO-GGA/
 ├── data/
 │   ├── layout/                 # Boundary polygons (GeoJSON) and turbine positions (CSV)
 │   ├── wind/
-│   │   ├── *.mat               # Directional wind distributions (16 sectors)
+│   │   ├── *.mat               # Directional wind distributions (12 sectors × 4 speed bins)
 │   │   └── windlib/            # ERA5-based wind library files (.lib, for QGIS/WAsP)
 │   ├── turbine/                # Power curve and turbine parameters (Vestas 4.2 MW)
 │   └── OWF8.qgz                # Compressed QGIS archive of all 8 benchmark sites
@@ -515,12 +590,94 @@ results/
         └── {algorithm}/
             ├── run_summary.csv
             ├── run_N_summary.mat     ← best LCOE, AEP, capacity factor, wake efficiency per run
-            └── {algorithm}_runN.mat ← complete generation history:
-                                        population, fitness, AEP, capacity factor,
-                                        cable topology, timing breakdown
+            └── {algorithm}_runN.mat ← complete generation history (see fields below)
 ```
 
-> **Note on version control**: The `.gitignore` excludes `*.mat`, `*.png`, and the `results/` directory. Result files generated at runtime are not tracked by Git. If you fork this repository and wish to archive your experimental results, commit the `results/` folder explicitly or use a separate storage location.
+**Per-run history file** (`{algorithm}_runN.mat`) contains the complete generation-by-generation record:
+
+| Field | Type | Description |
+|:------|:-----|:------------|
+| `population` | `max_it × popsize × M` | Full population at every generation |
+| `fitness` | `max_it × popsize` | LCOE for each individual at each generation |
+| `AEP` | `max_it × 1` | Best AEP per generation (MWh/year) |
+| `CF` | `max_it × 1` | Best capacity factor per generation |
+| `cable` | `1 × max_it` struct array | Full cable topology at each generation's best layout |
+| `timing` | struct | Wall-clock breakdown: wake model, routing, cost model, total |
+
+**Cable topology struct** (`cable`):
+
+| Field | Description |
+|:------|:------------|
+| `cable.connections` | Edge list: each row `[i, j]` where `i=0` denotes the substation |
+| `cable.lengths` | Length of each cable segment (m) |
+| `cable.types` | Cable grade index (1 = lightest, 3 = heaviest) per segment |
+| `cable.total_cost` | Total inter-array cable CAPEX ($) |
+
+> **Note on version control**: The `.gitignore` excludes `*.mat`, `*.png`, and the `results/` directory. Result files generated at runtime are not tracked by Git. If you fork this repository and wish to archive experimental results, commit the `results/` folder explicitly or use a separate storage location.
+
+---
+
+## Post-Processing & Analysis
+
+The per-run history files contain rich data for post-hoc analysis. The following snippets demonstrate common workflows.
+
+**Load and plot convergence curves:**
+
+```matlab
+% Load all runs for one algorithm/site combination
+result_dir = 'results/results_20260101_120000/UK_London_Array/GGA/';
+n_runs = 30;
+best_lcoe = zeros(100, n_runs);   % max_it × n_runs
+
+for r = 1:n_runs
+    S = load(fullfile(result_dir, sprintf('GGA_run%d.mat', r)));
+    best_lcoe(:, r) = min(S.fitness, [], 2);   % best LCOE per generation
+end
+
+figure;
+plot(mean(best_lcoe, 2), 'LineWidth', 2);
+xlabel('Generation'); ylabel('Mean best LCOE ($/MWh)');
+title('GGA convergence — UK London Array');
+```
+
+**Decompose cable cost by grade:**
+
+```matlab
+S = load('GGA_run1.mat');
+cable = S.cable(end);   % cable topology of best final layout
+
+grades = cable.types;
+lengths = cable.lengths;
+prices = wf.innercable_price;   % [$/m] per grade
+
+for g = 1:3
+    mask = (grades == g);
+    fprintf('Grade %d: %.1f km, $%.0fk\n', g, sum(lengths(mask))/1000, ...
+            sum(lengths(mask)) * prices(g) / 1e3);
+end
+```
+
+**Profile evaluation timing:**
+
+```matlab
+S = load('GGA_run1.mat');
+t = S.timing;
+fprintf('Wake model:   %.1f s/gen\n', t.wake / t.n_evals);
+fprintf('Routing:      %.1f s/gen\n', t.routing / t.n_evals);
+fprintf('Cost model:   %.1f s/gen\n', t.cost / t.n_evals);
+```
+
+**Compare LCOE distributions across algorithms (box plot):**
+
+```matlab
+summary = readtable('results/results_20260101_120000/global_run_summary.csv');
+algorithms = unique(summary.Algorithm);
+lcoe_data = cellfun(@(a) summary.BestLCOE(strcmp(summary.Algorithm, a) & ...
+            strcmp(summary.Case, 'UK_London_Array')), algorithms, 'UniformOutput', false);
+
+figure; boxplot(cell2mat(lcoe_data), algorithms);
+ylabel('Best LCOE ($/MWh)'); title('UK London Array — 30 runs per algorithm');
+```
 
 ---
 
