@@ -170,6 +170,52 @@ cfg.algonames  = { 'GGA', 'MyAlg' };
 
 The platform automatically handles output directory creation, result saving, seeding, and summary aggregation.
 
+### Replacing the Wake Model
+
+The wake model is implemented as the local function `jensen_model` inside `utils/evaluate.m`, and is called once per wind direction sector per wind speed bin:
+
+```matlab
+% Inside evaluate.m — the critical call site:
+R   = [cos(th) -sin(th); sin(th) cos(th)];
+rot = R * pos;                          % rotate layout so wind blows along +y axis
+ws  = jensen_model(rot, turbine, v);    % ← replace this line to swap wake models
+```
+
+The interface that any replacement must satisfy:
+
+```matlab
+function ws = my_wake_model(pos, turbine, U0)
+% Inputs:
+%   pos     - 2×T matrix of Cartesian positions [x; y] in metres,
+%             already rotated so that the wind blows in the +y direction
+%             (x = crosswind offset, y = downwind distance)
+%   turbine - struct with fields:
+%               .rotor_radius   rotor radius (m)
+%               .CutIn          cut-in wind speed (m/s)
+%               .CutOut         cut-out wind speed (m/s)
+%   U0      - freestream wind speed at hub height (m/s, scalar)
+%
+% Output:
+%   ws      - T×1 vector of effective wind speeds (m/s) at each turbine,
+%             accounting for all upstream wake interactions
+```
+
+**To substitute a different model** (e.g. Gaussian, Frandsen, LES-surrogate):
+
+1. Create `utils/my_wake_model.m` implementing the interface above.
+2. In `utils/evaluate.m`, replace the single line:
+   ```matlab
+   ws = jensen_model(rot, turbine, v);
+   ```
+   with:
+   ```matlab
+   ws = my_wake_model(rot, turbine, v);
+   ```
+
+No other files need to be modified. All ten algorithms, three routing strategies, and all eight benchmark sites will automatically use the new wake model.
+
+> **Current model**: Jensen (top-hat) wake, thrust coefficient C_T = 0.8, linear wake expansion with decay constant k = 0.04, quadratic superposition of velocity deficits.
+
 ### Adding a New Wind Farm Site
 
 **1. Prepare the data files** (place in the corresponding `data/` subdirectories):
