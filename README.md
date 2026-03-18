@@ -113,15 +113,15 @@ Ten metaheuristic algorithms are implemented as interchangeable solvers. All use
 | Algorithm | Category | Key Mechanism | Reference |
 |:----------|:---------|:--------------|:----------|
 | **GGA** ★ | Genetic | Half-plane crossover in Euclidean space | This work |
-| GA | Genetic | Single-point crossover · elitism | Standard |
-| AGA | Genetic | Adaptive mutation and crossover rates | Ju et al. 2019 |
-| PSO | Swarm | Binary PSO with top-M velocity ranking | Standard |
-| AGPSO | Hybrid | GA + PSO with stagnation recovery | Lei et al. 2022 |
-| BDE | Differential Evolution | Ranking-based pBest/pWorst mutation | Li et al. 2025 |
-| SaOFGDE | Differential Evolution | Fractional-order historical memory · adaptive CR | Zhang et al. 2025 |
-| DOLSSA | Swarm | Opposition-based learning Sparrow Search | Zhu et al. 2024 |
-| RLPS_TLBO | Learning-based | Q-learning phase selection in TLBO | Yu et al. 2024 |
-| EJAYA | Learning-based | Enhanced Jaya with attraction/repulsion | Zhang et al. 2021 |
+| GA | Genetic | Single-point crossover · elitism | — |
+| AGA | Genetic | Adaptive mutation and crossover rates | [Ju et al. 2019](https://doi.org/10.1016/j.apenergy.2019.04.084) |
+| BPSO | Swarm | Binary PSO with top-M velocity ranking | — |
+| AGPSO | Hybrid | GA + PSO with stagnation recovery | [Lei et al. 2022](https://doi.org/10.1016/j.enconman.2022.116174) |
+| BDE | Differential Evolution | Ranking-based pBest/pWorst mutation | [Li et al. 2025](https://doi.org/10.1016/j.energy.2025.137885) |
+| SaOFGDE | Differential Evolution | Fractional-order historical memory · adaptive CR | [Zhang et al. 2025](https://doi.org/10.1016/j.energy.2025.135866) |
+| DOLSSA | Swarm | Opposition-based learning Sparrow Search | [Zhu et al. 2024](https://doi.org/10.1155/2024/4322211) |
+| RLPS_TLBO | Learning-based | Q-learning phase selection in TLBO | [Yu et al. 2024](https://doi.org/10.1016/j.asoc.2024.111135) |
+| EJAYA | Learning-based | Enhanced Jaya with attraction/repulsion | [Zhang et al. 2021](https://doi.org/10.1016/j.knosys.2021.107555) |
 
 All competitor algorithms use hyperparameter values from their original publications without site-specific tuning. The complete parameter configurations are listed in Table B.9 of the paper.
 
@@ -135,7 +135,7 @@ WFLO-GGA/
 ├── alg/                        # Algorithm implementations
 │   ├── GGA.m                   # ★ Proposed method
 │   ├── GA.m / AGA.m            # Genetic algorithm variants
-│   ├── PSO.m / AGPSO.m        # Swarm intelligence variants
+│   ├── BPSO.m / AGPSO.m        # Swarm intelligence variants
 │   ├── BDE.m / SaOFGDE.m       # Differential evolution variants
 │   ├── DOLSSA.m                # Sparrow search variant
 │   ├── RLPS_TLBO.m             # Teaching-learning variant
@@ -199,8 +199,8 @@ main
 
 ```matlab
 cfg.routing_fn = @cr_sector;
-cfg.algorithms = { @GGA, @GA, @AGA, @PSO, @AGPSO, @BDE, @SaOFGDE, @DOLSSA, @RLPS_TLBO, @EJAYA };
-cfg.algonames  = { 'GGA', 'GA', 'AGA', 'PSO', 'AGPSO', 'BDE', 'SaOFGDE', 'DOLSSA', 'RLPS_TLBO', 'EJAYA' };
+cfg.algorithms = { @GGA, @GA, @AGA, @BPSO, @AGPSO, @BDE, @SaOFGDE, @DOLSSA, @RLPS_TLBO, @EJAYA };
+cfg.algonames  = { 'GGA', 'GA', 'AGA', 'BPSO', 'AGPSO', 'BDE', 'SaOFGDE', 'DOLSSA', 'RLPS_TLBO', 'EJAYA' };
 cfg.case_list  = { 'China_Zhuhai_Guishan_Hai', 'Netherlands_Egmond_aan_Zee', ...
                    'China_Shanghai_Lingang', 'Netherlands_Prinses_Amaliawindpark', ...
                    'Denmark_Nysted', 'UK_Sheringham_Shoal', ...
