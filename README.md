@@ -78,7 +78,9 @@ Eight operational offshore wind farms are included, spanning four countries and 
 
 **Each site provides**: geographic boundary polygon (GeoJSON), original turbine positions (CSV), and directional wind speed distribution (16 sectors, `.mat`). Candidate turbine positions for optimization are generated at runtime via Poisson-disk sampling with a minimum spacing of 3 rotor diameters.
 
-> **Data sources**: Wind resource data are derived from the [Global Wind Atlas](https://globalwindatlas.info) (ERA5-based microscale downscaling). Site boundaries and turbine positions are sourced from the global wind farm repository of [Zhang et al. (2021)](https://doi.org/10.1038/s41597-021-00982-z). See [Data Sources](#data-sources--acknowledgments) for full attribution.
+> **Additional site**: `Denmark_Horns_Rev_1` (80 turbines, regular grid) is available in the data directory but excluded from the main benchmark. It can be added to `cfg.case_list` directly.
+
+> **Data sources**: Wind resource data are derived from the [Global Wind Atlas](https://globalwindatlas.info) (ERA5-based microscale downscaling). Site boundaries and turbine positions are sourced from the global wind farm repository of [Zhang et al. (2021)](https://doi.org/10.1038/s41597-021-00982-z). See [Data Sources & Acknowledgments](#data-sources--acknowledgments) for full attribution.
 
 ---
 
@@ -127,13 +129,80 @@ All competitor algorithms use hyperparameter values from their original publicat
 
 ---
 
+## Extending the Platform
+
+### Adding a New Algorithm
+
+All algorithms share an identical interface. To add a new solver, create `alg/MyAlg.m` with the following signature:
+
+```matlab
+function best_fit = MyAlg(wf, turbine, max_it, runtime, popsize, algname, results_dir, Pop0, routing_fn)
+% Inputs:
+%   wf          - wind farm struct (candidate positions, boundary, wind resource, cable params)
+%   turbine     - turbine struct (power curve, thrust coefficient, rotor diameter)
+%   max_it      - maximum number of iterations
+%   runtime     - run index (used for output file naming and RNG seeding)
+%   popsize     - population size
+%   algname     - string identifier for output files
+%   results_dir - path to write per-run output files
+%   Pop0        - initial population (popsize × M integer matrix, each row is a chromosome)
+%   routing_fn  - cable routing function handle (@cr_sector, @cr_mst, or @cr_sweep)
+%
+% Output:
+%   best_fit    - best LCOE achieved (scalar, $/MWh; lower is better)
+%
+% Chromosome encoding:
+%   Each individual is a length-M integer vector of distinct indices in [1, wf.N].
+%   Index k selects candidate position wf.coords(k, :) as a turbine location.
+%   Use unique_fix(ind, wf.N) to repair infeasible chromosomes after crossover/mutation.
+%
+% Fitness evaluation:
+%   cable  = routing_fn(wf.coords(ind, :), wf);
+%   [lcoe] = evaluate(wf, turbine, cable, wf.coords(ind, :));
+```
+
+Then register it in `main.m`:
+
+```matlab
+cfg.algorithms = { @GGA, @MyAlg };
+cfg.algonames  = { 'GGA', 'MyAlg' };
+```
+
+The platform automatically handles output directory creation, result saving, seeding, and summary aggregation.
+
+### Adding a New Wind Farm Site
+
+**1. Prepare the data files** (place in the corresponding `data/` subdirectories):
+
+| File | Location | Format |
+|:-----|:---------|:-------|
+| Boundary polygon | `data/layout/SiteName.geojson` | GeoJSON FeatureCollection with one Polygon |
+| Turbine positions | `data/layout/SiteName.csv` | Columns: `centr_lat`, `centr_lon`, `country` (WGS84) |
+| Wind resource | `data/wind/SiteName.mat` | Variables: `theta` (16×1 rad), `velocity` (Nv×1 m/s), `f_theta_v` (16×Nv probability) |
+
+**2. Add a case block in `load_problem_poisson.m`** by following the pattern of any existing site. Key fields to set in the `wf` struct:
+
+```matlab
+wf.M               % number of turbines to place (integer)
+wf.cable_capacity  % maximum turbines per cable string (typically 8-10)
+wf.depth           % mean water depth in meters (affects foundation cost)
+wf.export_cable    % export cable cost (fixed, $)
+wf.innercable_price % [price_grade1, price_grade2, price_grade3] ($/m)
+```
+
+**3. Add the site name to `cfg.case_list` in `main.m`.**
+
+> **Reference implementation**: `Denmark_Horns_Rev_1` (80 turbines, regular grid) is fully implemented and available as a ready-to-use example — its data files are already present in `data/` and the case block exists in `load_problem_poisson.m`. Add `'Denmark_Horns_Rev_1'` to `cfg.case_list` to include it in any experiment.
+
+---
+
 ## Repository Structure
 
 ```
 WFLO-GGA/
 ├── main.m                      # Experiment entry point
 ├── alg/                        # Algorithm implementations
-│   ├── GGA.m                   # ★ Proposed method
+│   ├── GGA.m                   # ★ Proposed method (306 lines)
 │   ├── GA.m / AGA.m            # Genetic algorithm variants
 │   ├── BPSO.m / AGPSO.m        # Swarm intelligence variants
 │   ├── BDE.m / SaOFGDE.m       # Differential evolution variants
@@ -141,8 +210,8 @@ WFLO-GGA/
 │   ├── RLPS_TLBO.m             # Teaching-learning variant
 │   └── EJAYA.m                 # Jaya variant
 ├── utils/
-│   ├── evaluate.m              # LCOE / AEP evaluation (core model)
-│   ├── cr_sector.m             # Balance-Sector Routing (BSR)
+│   ├── evaluate.m              # LCOE / AEP / CF evaluation (core physics model)
+│   ├── cr_sector.m             # Balance-Sector Routing (BSR)  ★
 │   ├── cr_mst.m                # Minimum Spanning Tree routing
 │   ├── cr_sweep.m              # Sweep-line routing
 │   ├── load_problem_poisson.m  # Site loader + Poisson-disk sampling
@@ -150,9 +219,11 @@ WFLO-GGA/
 │   └── unique_fix.m            # Chromosome feasibility repair
 ├── data/
 │   ├── layout/                 # Boundary polygons (GeoJSON) and turbine positions (CSV)
-│   ├── wind/                   # Directional wind distributions (MAT, 16 sectors)
-│   ├── turbine/                # Power curve and turbine parameters
-│   └── OWF8.qgz                # Compressed archive of all benchmark data (QGIS format)
+│   ├── wind/
+│   │   ├── *.mat               # Directional wind distributions (16 sectors)
+│   │   └── windlib/            # ERA5-based wind library files (.lib, for QGIS/WAsP)
+│   ├── turbine/                # Power curve and turbine parameters (Vestas 4.2 MW)
+│   └── OWF8.qgz                # Compressed QGIS archive of all 8 benchmark sites
 └── figures/                    # README figures
 ```
 
@@ -164,7 +235,7 @@ WFLO-GGA/
 
 - MATLAB R2018a or later
 - No external toolboxes required for core functionality
-- Parallel Computing Toolbox (optional, for `parfor`-based multi-run parallelism)
+- Parallel Computing Toolbox (optional, for multi-run parallelism)
 
 ### Steps
 
@@ -212,6 +283,13 @@ cfg.base_seed  = 42;
 main
 ```
 
+**5. Enable parallel execution** (requires Parallel Computing Toolbox)
+
+```matlab
+cfg.enable_parallel  = true;
+cfg.parallel_workers = 4;   % 0 = use MATLAB default pool size
+```
+
 Results are saved to `results/results_YYYYMMDD_HHMMSS/`.
 
 ---
@@ -232,7 +310,7 @@ The following configurations reproduce the main tables and figures in the paper.
 | Figure 7 — Convergence curves | `@cr_sector` | `run_summary.csv` per algorithm/site |
 | Figure 8 — Box plots | `@cr_sector` | `run_N_summary.mat` across 30 runs |
 
-> The candidate point set is generated once via Poisson-disk sampling and shared across all algorithms in a given experiment. With `cfg.base_seed = 42`, this sampling is deterministic and the reported results are exactly reproducible.
+> **Reproducibility mechanism**: The RNG seed for each run is derived from `cfg.base_seed`, the site name, the algorithm name, and the run index, ensuring that every individual run is independently reproducible. The Poisson-disk candidate set is generated once per site and shared across all algorithms in a given session. With `cfg.base_seed = 42`, all reported results are exactly reproducible.
 
 ---
 
@@ -248,11 +326,13 @@ results/
     └── {site_name}/
         └── {algorithm}/
             ├── run_summary.csv
-            ├── run_N_summary.mat     ← best LCOE, AEP, wake efficiency per run
+            ├── run_N_summary.mat     ← best LCOE, AEP, capacity factor, wake efficiency per run
             └── {algorithm}_runN.mat ← complete generation history:
-                                        population, fitness, AEP, wake efficiency,
+                                        population, fitness, AEP, capacity factor,
                                         cable topology, timing breakdown
 ```
+
+> **Note on version control**: The `.gitignore` excludes `*.mat`, `*.png`, and the `results/` directory. Result files generated at runtime are not tracked by Git. If you fork this repository and wish to archive your own experimental results, commit the `results/` folder explicitly or use a separate storage location.
 
 ---
 
