@@ -170,6 +170,84 @@ cfg.algonames  = { 'GGA', 'MyAlg' };
 
 The platform automatically handles output directory creation, result saving, seeding, and summary aggregation.
 
+### Swapping the Turbine Model
+
+The turbine is defined in two places: a **CSV power/thrust table** and a set of **scalar parameters** set in `load_problem_poisson.m`.
+
+**Step 1 — Prepare a new turbine CSV** in `data/turbine/`, with three columns (no header row):
+
+```
+speed_m_s,  power_kW,  Ct
+3.0,        0,         0.00
+...
+13.0,       4200,      0.80
+...
+25.0,       4200,      0.50
+```
+
+**Step 2 — Update the turbine block** in `load_problem_poisson.m`:
+
+```matlab
+turbine_file = './data/turbine/MyTurbine_6MW.csv';   % point to new CSV
+
+turbine.Pinst          = 6000;    % rated power (kW)
+turbine.hub_height     = 105.0;   % hub height (m)
+turbine.rotor_diameter = 154.0;   % rotor diameter (m)  ← drives minimum turbine spacing
+turbine.rotor_radius   = turbine.rotor_diameter / 2;
+turbine.CutIn          = 3.0;     % cut-in wind speed (m/s)
+turbine.CutOut         = 25.0;    % cut-out wind speed (m/s)
+```
+
+**Downstream effects that update automatically:**
+
+| Parameter | How it responds to turbine change |
+|:----------|:----------------------------------|
+| Poisson-disk spacing | `r = 3 × rotor_diameter` — denser or sparser candidate grid |
+| Cable capacity per string | Re-derived from rated current ÷ turbine current: `floor(I_rated / I_turbine)` |
+| Foundation cost | Scales with `hub_height`, `rotor_diameter`, and `Pinst` via the Dicorato model |
+| Turbine CAPEX | Re-computed from `log(Pinst/1000)` cost curve |
+
+No algorithm or routing code requires modification; all use `turbine` and `wf` as opaque structs.
+
+### Enabling Spatially Varying Bathymetry
+
+By default all benchmark sites use a **uniform sea depth** (`wf.sea_depth = 7 m`), and the foundation cost in `evaluate.m` applies it uniformly:
+
+```matlab
+SD  = wf.sea_depth;                                          % scalar
+C_f = 320 * PWT * (1 + 0.02*(SD - 8)) * (...);             % per-turbine cost (uniform)
+toC = (C_W + C_ist + 1.5*C_f) * T;                         % × T turbines
+```
+
+To activate **depth-dependent foundation costs** for a real bathymetric dataset:
+
+**Step 1 — Store a per-candidate depth vector** when loading the site in `load_problem_poisson.m`:
+
+```matlab
+% After generating wf.candidate_points (N × 2 matrix in metres):
+% Load or interpolate your bathymetric grid at each candidate location.
+depth_grid = load('my_site_bathymetry.mat');   % struct with .x, .y, .depth fields
+F = scatteredInterpolant(depth_grid.x, depth_grid.y, depth_grid.depth, 'linear');
+wf.candidate_depths = F(wf.candidate_points(:,1), wf.candidate_points(:,2));  % N × 1
+```
+
+**Step 2 — Replace the uniform cost line** in `utils/evaluate.m`:
+
+```matlab
+% Original (uniform depth):
+SD  = wf.sea_depth;
+C_f = 320 * PWT * (1 + 0.02*(SD - 8)) * (1 + 0.8e-6*(H*(D/2)^2 - 1e5));
+toC = (C_W + C_ist + 1.5*C_f) * T;
+
+% Replacement (spatially varying depth):
+% layout_idx are the candidate indices selected by the algorithm (passed via layout_coords)
+SD_vec = wf.candidate_depths(layout_idx);           % T × 1, one depth per turbine
+C_f_vec = 320 * PWT * (1 + 0.02*(SD_vec - 8)) * (1 + 0.8e-6*(H*(D/2)^2 - 1e5));
+toC = (C_W + C_ist) * T + 1.5 * sum(C_f_vec);
+```
+
+> **Note**: `layout_idx` is the chromosome (candidate index vector) corresponding to `layout_coords`. It is available in `evaluate.m` if passed as an additional argument, or can be recovered by matching `layout_coords` against `wf.candidate_points`. The simplest integration is to extend the `evaluate` function signature to accept `layout_idx` directly.
+
 ### Replacing the Wake Model
 
 The wake model is implemented as the local function `jensen_model` inside `utils/evaluate.m`, and is called once per wind direction sector per wind speed bin:
