@@ -271,11 +271,11 @@ This benchmark uses exclusively public, verifiable data:
 
 | Data | Source | Reference |
 |:-----|:-------|:----------|
-| Wind resource (16-sector distributions) | Global Wind Atlas v3, ERA5-based microscale downscaling | Davis et al. (2023) |
-| Site boundaries and turbine positions | Global wind farm repository | Zhang et al. (2021) |
-| CAPEX cost coefficients | Dicorato et al. (2011); Gonzalez-Rodriguez (2017) |
-| OPEX benchmark value (86 $/kW/year) | NREL 2018 Cost of Wind Energy Review |
-| Cable cost parameters | Kirchner-Bossi & Porté-Agel (2024) |
+| Wind resource (16-sector distributions) | [Global Wind Atlas v3](https://globalwindatlas.info), ERA5-based microscale downscaling | [Davis et al. (2023)](https://doi.org/10.1175/BAMS-D-21-0075.1) |
+| Site boundaries and turbine positions | [Global wind farm repository](https://doi.org/10.1038/s41597-021-00982-z) | [Zhang et al. (2021)](https://doi.org/10.1038/s41597-021-00982-z) |
+| CAPEX cost coefficients | [Dicorato et al. (2011)](https://doi.org/10.1016/j.renene.2011.01.003); [Gonzalez-Rodriguez (2017)](https://doi.org/10.1016/j.esd.2016.12.001) | |
+| OPEX benchmark value (86 $/kW/year) | [NREL 2018 Cost of Wind Energy Review](https://www.nrel.gov/docs/fy18osti/72167.pdf) | |
+| Cable cost parameters | [Kirchner-Bossi & Porté-Agel (2024)](https://doi.org/10.1016/j.renene.2023.119524) | |
 
 If you use the benchmark dataset, please additionally cite:
 
