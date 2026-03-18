@@ -31,6 +31,7 @@
   - [Swapping the Turbine Model](#swapping-the-turbine-model)
   - [Enabling Spatially Varying Bathymetry](#enabling-spatially-varying-bathymetry)
   - [Replacing the Wake Model](#replacing-the-wake-model)
+  - [Refining Wind Resource Discretization](#refining-wind-resource-discretization)
   - [Adding a New Wind Farm Site](#adding-a-new-wind-farm-site)
 - [Repository Structure](#repository-structure)
 - [Quick Start](#quick-start)
@@ -103,7 +104,7 @@ Eight operational offshore wind farms are included, spanning four countries and 
 | (g) | `Denmark_Rodsand_II` | Denmark | 207.0 | 90 | Semi-irregular |
 | (h) | `UK_London_Array` | UK | 630.0 | 175 | Irregular |
 
-**Each site provides**: geographic boundary polygon (GeoJSON), original turbine positions (CSV), and directional wind speed distribution (16 sectors, `.mat`). Candidate turbine positions for optimization are generated at runtime via Poisson-disk sampling with a minimum spacing of 3 rotor diameters.
+**Each site provides**: geographic boundary polygon (GeoJSON), original turbine positions (CSV), and directional wind speed distribution (12 sectors × 4 wind speed bins, `.mat`). Candidate turbine positions for optimization are generated at runtime via Poisson-disk sampling with a minimum spacing of 3 rotor diameters.
 
 > **Additional site**: `Denmark_Horns_Rev_1` (80 turbines, regular grid) is available in the data directory but excluded from the main benchmark. It can be added to `cfg.case_list` directly.
 
@@ -326,6 +327,37 @@ No other files need to be modified. All ten algorithms, three routing strategies
 
 > **Current model**: Jensen (top-hat) wake, thrust coefficient C_T = 0.8, linear wake expansion with decay constant k = 0.04, quadratic superposition of velocity deficits.
 
+### Refining Wind Resource Discretization
+
+The benchmark wind data uses **12 directional sectors × 4 wind speed bins** per site (30° angular resolution, derived from the Global Wind Atlas). The AEP integration in `evaluate.m` is fully resolution-agnostic:
+
+```matlab
+AEP = Σ_d Σ_v  f(d, v) · P_wake(layout, d, v) · 8760
+```
+
+The double loop iterates over `length(wf.theta)` directions and `length(wf.velocity)` speed bins, so increasing either dimension requires no code change.
+
+**To use a finer wind rose**, replace the site's `.mat` file with one that contains higher-resolution arrays:
+
+```matlab
+% Current benchmark resolution (from Global Wind Atlas):
+wf.theta     = linspace(0, 2*pi*(11/12), 12)';   % 12 sectors, 30° spacing
+wf.velocity  = [5; 8; 11; 14];                    % 4 speed bins (m/s)
+wf.f_theta_v = ...;  % 12 × 4 joint probability matrix, rows sum to 1
+
+% Example: refined to 36 sectors × 10 speed bins (10° spacing, 1 m/s resolution):
+wf.theta     = linspace(0, 2*pi*(35/36), 36)';
+wf.velocity  = (3:1:25)';
+wf.f_theta_v = ...;  % 36 × 23 joint probability matrix
+```
+
+**Computational trade-off**: evaluation cost scales linearly with `n_sectors × n_bins`, since the wake calculation runs once per (direction, speed) pair. For large wind farms (T > 100 turbines) or long optimization runs, the default 12 × 4 resolution offers a practical balance between AEP accuracy and runtime. Finer discretizations are recommended for post-hoc validation of the best layout rather than for the optimization loop itself.
+
+**Wind data sources for refinement**:
+- [Global Wind Atlas](https://globalwindatlas.info) — provides site-specific wind roses at up to 36-sector resolution via web export
+- [ERA5 reanalysis](https://doi.org/10.24381/cds.adbb2d47) — hourly time series that can be binned to arbitrary (direction, speed) resolution
+- Site measurement data — if available, replace the `.mat` file entirely with measured distributions
+
 ### Adding a New Wind Farm Site
 
 **Step 1 — Prepare the data files** (place in the corresponding `data/` subdirectories):
@@ -507,7 +539,7 @@ This benchmark uses exclusively public, verifiable data:
 
 | Data | Source | Reference |
 |:-----|:-------|:----------|
-| Wind resource (16-sector distributions) | [Global Wind Atlas v3](https://globalwindatlas.info), ERA5-based microscale downscaling | [Davis et al. (2023)](https://doi.org/10.1175/BAMS-D-21-0075.1) |
+| Wind resource (12 sectors × 4 speed bins) | [Global Wind Atlas v3](https://globalwindatlas.info), ERA5-based microscale downscaling | [Davis et al. (2023)](https://doi.org/10.1175/BAMS-D-21-0075.1) |
 | Site boundaries and turbine positions | [Global wind farm repository](https://doi.org/10.1038/s41597-021-00982-z) | [Zhang et al. (2021)](https://doi.org/10.1038/s41597-021-00982-z) |
 | CAPEX cost coefficients | [Dicorato et al. (2011)](https://doi.org/10.1016/j.renene.2011.01.003); [Gonzalez-Rodriguez (2017)](https://doi.org/10.1016/j.esd.2016.12.001) | |
 | OPEX benchmark value (86 $/kW/year) | [NREL 2018 Cost of Wind Energy Review](https://www.nrel.gov/docs/fy18osti/72167.pdf) | |
