@@ -115,7 +115,7 @@ Ten metaheuristic algorithms are implemented as interchangeable solvers. All use
 | **GGA** ★ | Genetic | Half-plane crossover in Euclidean space | This work |
 | GA | Genetic | Single-point crossover · elitism | Standard |
 | AGA | Genetic | Adaptive mutation and crossover rates | Ju et al. 2019 |
-| BPSO | Swarm | Binary PSO with top-M velocity ranking | Standard |
+| PSO | Swarm | Binary PSO with top-M velocity ranking | Standard |
 | AGPSO | Hybrid | GA + PSO with stagnation recovery | Lei et al. 2022 |
 | BDE | Differential Evolution | Ranking-based pBest/pWorst mutation | Li et al. 2025 |
 | SaOFGDE | Differential Evolution | Fractional-order historical memory · adaptive CR | Zhang et al. 2025 |
@@ -135,7 +135,7 @@ WFLO-GGA/
 ├── alg/                        # Algorithm implementations
 │   ├── GGA.m                   # ★ Proposed method
 │   ├── GA.m / AGA.m            # Genetic algorithm variants
-│   ├── BPSO.m / AGPSO.m        # Swarm intelligence variants
+│   ├── PSO.m / AGPSO.m        # Swarm intelligence variants
 │   ├── BDE.m / SaOFGDE.m       # Differential evolution variants
 │   ├── DOLSSA.m                # Sparrow search variant
 │   ├── RLPS_TLBO.m             # Teaching-learning variant
@@ -199,8 +199,8 @@ main
 
 ```matlab
 cfg.routing_fn = @cr_sector;
-cfg.algorithms = { @GGA, @GA, @AGA, @BPSO, @AGPSO, @BDE, @SaOFGDE, @DOLSSA, @RLPS_TLBO, @EJAYA };
-cfg.algonames  = { 'GGA', 'GA', 'AGA', 'BPSO', 'AGPSO', 'BDE', 'SaOFGDE', 'DOLSSA', 'RLPS_TLBO', 'EJAYA' };
+cfg.algorithms = { @GGA, @GA, @AGA, @PSO, @AGPSO, @BDE, @SaOFGDE, @DOLSSA, @RLPS_TLBO, @EJAYA };
+cfg.algonames  = { 'GGA', 'GA', 'AGA', 'PSO', 'AGPSO', 'BDE', 'SaOFGDE', 'DOLSSA', 'RLPS_TLBO', 'EJAYA' };
 cfg.case_list  = { 'China_Zhuhai_Guishan_Hai', 'Netherlands_Egmond_aan_Zee', ...
                    'China_Shanghai_Lingang', 'Netherlands_Prinses_Amaliawindpark', ...
                    'Denmark_Nysted', 'UK_Sheringham_Shoal', ...
