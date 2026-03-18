@@ -16,6 +16,33 @@
 
 ---
 
+## Table of Contents
+
+- [Overview](#overview)
+- [Key Results](#key-results)
+- [Benchmark Sites](#benchmark-sites)
+- [Method: GGA and BSR](#method-gga-and-bsr)
+  - [Candidate Point Generation (Poisson-Disk Sampling)](#candidate-point-generation-poisson-disk-sampling)
+  - [Geometry-guided Crossover (G-crossover)](#geometry-guided-crossover-g-crossover)
+  - [Balance-Sector Routing (BSR)](#balance-sector-routing-bsr)
+- [Algorithm Suite](#algorithm-suite)
+- [Extending the Platform](#extending-the-platform)
+  - [Adding a New Algorithm](#adding-a-new-algorithm)
+  - [Swapping the Turbine Model](#swapping-the-turbine-model)
+  - [Enabling Spatially Varying Bathymetry](#enabling-spatially-varying-bathymetry)
+  - [Replacing the Wake Model](#replacing-the-wake-model)
+  - [Adding a New Wind Farm Site](#adding-a-new-wind-farm-site)
+- [Repository Structure](#repository-structure)
+- [Quick Start](#quick-start)
+- [Reproducing Paper Results](#reproducing-paper-results)
+- [Output Structure](#output-structure)
+- [Optimized Layout Example](#optimized-layout-example)
+- [Data Sources & Acknowledgments](#data-sources--acknowledgments)
+- [Citation](#citation)
+- [License](#license)
+
+---
+
 ## Overview
 
 Offshore wind farm layout and cable routing are intrinsically coupled: larger turbine spacing reduces wake losses but increases cable length and cost. Optimizing them jointly—rather than sequentially—can meaningfully reduce the Levelized Cost of Energy (LCOE).
@@ -86,11 +113,28 @@ Eight operational offshore wind farms are included, spanning four countries and 
 
 ## Method: GGA and BSR
 
+### Candidate Point Generation (Poisson-Disk Sampling)
+
+<p align="center">
+  <img src="figures/candidate_sampling.png" alt="Poisson-disk sampling of candidate turbine positions" width="80%">
+  <br><em>Figure 4. Poisson-disk-sampled candidate turbine positions for two representative sites. The minimum inter-point distance equals 3 rotor diameters (351 m), ensuring that any selected subset automatically satisfies the spacing constraint.</em>
+</p>
+
+Before optimization begins, each wind farm boundary is populated with candidate turbine positions using **Bridson's Poisson-disk sampling algorithm**. This step serves two purposes: it enforces the minimum turbine spacing constraint (3 rotor diameters, 351 m) structurally, so no repair step is required during optimization; and it provides a shared, reproducible search space for all ten algorithms.
+
+The sampling procedure is as follows:
+
+1. The boundary polygon is extracted from the GeoJSON file and used as a feasibility mask.
+2. Bridson's algorithm generates points inside the polygon such that no two points are closer than the minimum spacing *r*. If the initial *r* yields fewer candidates than the required turbine count *M*, *r* is reduced by 1% and the procedure repeats.
+3. The resulting *N* candidate points are fixed for the entire experiment session. All algorithms search within the same discrete set `{1, …, N}`, selecting *M* indices as a layout.
+
+With `cfg.base_seed = 42`, the sampling is deterministic and identical across all algorithms and runs, ensuring that observed performance differences reflect algorithmic behavior rather than differences in the feasible search space.
+
 ### Geometry-guided Crossover (G-crossover)
 
 <p align="center">
   <img src="figures/gcrossover.png" alt="G-crossover mechanism" width="75%">
-  <br><em>Figure 4. G-crossover partitions each parent layout into two complementary half-planes and exchanges spatial segments between parents. The dividing angle φ is resampled each generation.</em>
+  <br><em>Figure 5. G-crossover partitions each parent layout into two complementary half-planes and exchanges spatial segments between parents. The dividing angle φ is resampled each generation.</em>
 </p>
 
 Standard genetic crossover operates on integer indices and disrupts spatial structure, generating infeasible offspring that require repair. G-crossover instead partitions the wind farm into **two complementary half-planes** defined by a random line through the offshore substation. The partition is performed in **Euclidean space using a signed dot product** — no polar coordinate assumption is required, and the operator is valid for any irregular boundary geometry. Turbines within each half-plane are inherited as a coherent group, preserving locally favorable spatial configurations.
@@ -101,7 +145,7 @@ For wind farms with regular grid-like geometries, G-crossover remains applicable
 
 <p align="center">
   <img src="figures/cable_routing.png" alt="Cable routing comparison" width="85%">
-  <br><em>Figure 5. Cable routing strategy comparison on a representative site. BSR achieves balanced branch loading (4 groups of {9, 8, 9, 8} turbines) compared to Sweep's fragmented allocation.</em>
+  <br><em>Figure 6. Cable routing strategy comparison on a representative site. BSR achieves balanced branch loading (4 groups of {9, 8, 9, 8} turbines) compared to Sweep's fragmented allocation.</em>
 </p>
 
 BSR maps turbines to polar angles relative to the substation, partitions them into angular sectors of approximately equal size, and constructs a local MST within each sector. A rotational search over up to T_max starting positions selects the configuration with minimum total cable cost. This design ensures capacity feasibility, reduces high-grade cable usage, and achieves lower total cable cost than Sweep in most configurations.
@@ -172,7 +216,7 @@ The platform automatically handles output directory creation, result saving, see
 
 ### Swapping the Turbine Model
 
-The turbine is defined in two places: a **CSV power/thrust table** and a set of **scalar parameters** set in `load_problem_poisson.m`.
+The turbine is defined in two places: a **CSV power/thrust table** and a set of **scalar parameters** in `load_problem_poisson.m`.
 
 **Step 1 — Prepare a new turbine CSV** in `data/turbine/`, with three columns (no header row):
 
@@ -225,7 +269,6 @@ To activate **depth-dependent foundation costs** for a real bathymetric dataset:
 
 ```matlab
 % After generating wf.candidate_points (N × 2 matrix in metres):
-% Load or interpolate your bathymetric grid at each candidate location.
 depth_grid = load('my_site_bathymetry.mat');   % struct with .x, .y, .depth fields
 F = scatteredInterpolant(depth_grid.x, depth_grid.y, depth_grid.depth, 'linear');
 wf.candidate_depths = F(wf.candidate_points(:,1), wf.candidate_points(:,2));  % N × 1
@@ -240,13 +283,12 @@ C_f = 320 * PWT * (1 + 0.02*(SD - 8)) * (1 + 0.8e-6*(H*(D/2)^2 - 1e5));
 toC = (C_W + C_ist + 1.5*C_f) * T;
 
 % Replacement (spatially varying depth):
-% layout_idx are the candidate indices selected by the algorithm (passed via layout_coords)
 SD_vec = wf.candidate_depths(layout_idx);           % T × 1, one depth per turbine
 C_f_vec = 320 * PWT * (1 + 0.02*(SD_vec - 8)) * (1 + 0.8e-6*(H*(D/2)^2 - 1e5));
 toC = (C_W + C_ist) * T + 1.5 * sum(C_f_vec);
 ```
 
-> **Note**: `layout_idx` is the chromosome (candidate index vector) corresponding to `layout_coords`. It is available in `evaluate.m` if passed as an additional argument, or can be recovered by matching `layout_coords` against `wf.candidate_points`. The simplest integration is to extend the `evaluate` function signature to accept `layout_idx` directly.
+> **Note**: `layout_idx` is the chromosome (candidate index vector) corresponding to `layout_coords`. The simplest integration is to extend the `evaluate` function signature to accept `layout_idx` as an additional argument.
 
 ### Replacing the Wake Model
 
@@ -266,29 +308,17 @@ function ws = my_wake_model(pos, turbine, U0)
 % Inputs:
 %   pos     - 2×T matrix of Cartesian positions [x; y] in metres,
 %             already rotated so that the wind blows in the +y direction
-%             (x = crosswind offset, y = downwind distance)
-%   turbine - struct with fields:
-%               .rotor_radius   rotor radius (m)
-%               .CutIn          cut-in wind speed (m/s)
-%               .CutOut         cut-out wind speed (m/s)
+%   turbine - struct with fields: .rotor_radius, .CutIn, .CutOut
 %   U0      - freestream wind speed at hub height (m/s, scalar)
 %
 % Output:
-%   ws      - T×1 vector of effective wind speeds (m/s) at each turbine,
-%             accounting for all upstream wake interactions
+%   ws      - T×1 vector of effective wind speeds (m/s) at each turbine
 ```
 
 **To substitute a different model** (e.g. Gaussian, Frandsen, LES-surrogate):
 
 1. Create `utils/my_wake_model.m` implementing the interface above.
-2. In `utils/evaluate.m`, replace the single line:
-   ```matlab
-   ws = jensen_model(rot, turbine, v);
-   ```
-   with:
-   ```matlab
-   ws = my_wake_model(rot, turbine, v);
-   ```
+2. In `utils/evaluate.m`, replace the single line `ws = jensen_model(...)` with `ws = my_wake_model(...)`.
 
 No other files need to be modified. All ten algorithms, three routing strategies, and all eight benchmark sites will automatically use the new wake model.
 
@@ -296,7 +326,7 @@ No other files need to be modified. All ten algorithms, three routing strategies
 
 ### Adding a New Wind Farm Site
 
-**1. Prepare the data files** (place in the corresponding `data/` subdirectories):
+**Step 1 — Prepare the data files** (place in the corresponding `data/` subdirectories):
 
 | File | Location | Format |
 |:-----|:---------|:-------|
@@ -304,19 +334,19 @@ No other files need to be modified. All ten algorithms, three routing strategies
 | Turbine positions | `data/layout/SiteName.csv` | Columns: `centr_lat`, `centr_lon`, `country` (WGS84) |
 | Wind resource | `data/wind/SiteName.mat` | Variables: `theta` (16×1 rad), `velocity` (Nv×1 m/s), `f_theta_v` (16×Nv probability) |
 
-**2. Add a case block in `load_problem_poisson.m`** by following the pattern of any existing site. Key fields to set in the `wf` struct:
+**Step 2 — Add a case block in `load_problem_poisson.m`** following the pattern of any existing site. Key fields to set:
 
 ```matlab
 wf.M               % number of turbines to place (integer)
 wf.cable_capacity  % maximum turbines per cable string (typically 8-10)
-wf.depth           % mean water depth in meters (affects foundation cost)
+wf.sea_depth       % mean water depth in metres (affects foundation cost)
 wf.export_cable    % export cable cost (fixed, $)
 wf.innercable_price % [price_grade1, price_grade2, price_grade3] ($/m)
 ```
 
-**3. Add the site name to `cfg.case_list` in `main.m`.**
+**Step 3 — Add the site name to `cfg.case_list` in `main.m`.**
 
-> **Reference implementation**: `Denmark_Horns_Rev_1` (80 turbines, regular grid) is fully implemented and available as a ready-to-use example — its data files are already present in `data/` and the case block exists in `load_problem_poisson.m`. Add `'Denmark_Horns_Rev_1'` to `cfg.case_list` to include it in any experiment.
+> **Reference implementation**: `Denmark_Horns_Rev_1` (80 turbines, regular grid) is fully implemented — data files are present and the case block exists in `load_problem_poisson.m`. Add `'Denmark_Horns_Rev_1'` to `cfg.case_list` to include it immediately.
 
 ---
 
@@ -456,7 +486,7 @@ results/
                                         cable topology, timing breakdown
 ```
 
-> **Note on version control**: The `.gitignore` excludes `*.mat`, `*.png`, and the `results/` directory. Result files generated at runtime are not tracked by Git. If you fork this repository and wish to archive your own experimental results, commit the `results/` folder explicitly or use a separate storage location.
+> **Note on version control**: The `.gitignore` excludes `*.mat`, `*.png`, and the `results/` directory. Result files generated at runtime are not tracked by Git. If you fork this repository and wish to archive your experimental results, commit the `results/` folder explicitly or use a separate storage location.
 
 ---
 
@@ -464,7 +494,7 @@ results/
 
 <p align="center">
   <img src="figures/final_layout.png" alt="Optimized turbine layout and cable routing" width="70%">
-  <br><em>Figure 6. Representative best layouts produced by all 10 algorithms across the 8 benchmark sites under BSR routing. Each column is a wind farm; each row is an algorithm. Wake fields are visualized under the prevailing wind direction.</em>
+  <br><em>Figure 7. Representative best layouts produced by all 10 algorithms across the 8 benchmark sites under BSR routing. Each column is a wind farm; each row is an algorithm. Wake fields are visualized under the prevailing wind direction.</em>
 </p>
 
 ---
