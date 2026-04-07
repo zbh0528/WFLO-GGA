@@ -1,5 +1,5 @@
 function best_fit = GA(wf, turbine, max_it, runtime, popsize, algname, results_dir, Pop0, routing_fn)
-<1975> <single> <integer> <none>
+% <1975> <single> <integer> <none>
 % Classical genetic algorithm
 % mutation_rate --- 0.05 --- Probability of mutating each gene
 % elite_num     --- 1    --- Number of elite individuals preserved each generation
