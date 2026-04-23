@@ -721,14 +721,16 @@ If you use the benchmark dataset, please additionally cite:
 If you use this platform, dataset, or any algorithm implementation in your research, please cite:
 
 ```bibtex
-@article{zhang2026wflogga,
-  title   = {A Geometry-guided Genetic Algorithm for Integrated Offshore Wind Farm
-             Layout and Electrical Cable Routing Optimization},
-  author  = {Zhang, Baohang and Shao, Yixin and Lei, Zhenyu and Zhang, Chao
-             and Wang, Yirui and Gao, Shangce},
-  journal = {Applied Energy},
-  year    = {2026},
-  note    = {Under review}
+@article{ZHANG2026127895,
+title = {A geometry-guided genetic algorithm for integrated offshore wind farm layout and electrical cable routing optimization},
+journal = {Applied Energy},
+volume = {415},
+pages = {127895},
+year = {2026},
+issn = {0306-2619},
+doi = {https://doi.org/10.1016/j.apenergy.2026.127895},
+url = {https://www.sciencedirect.com/science/article/pii/S0306261926005477},
+author = {Baohang Zhang and Yixin Shao and Zhenyu Lei and Chao Zhang and Yirui Wang and Shangce Gao}
 }
 ```
 
