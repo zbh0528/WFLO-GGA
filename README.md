@@ -160,7 +160,7 @@ BSR maps turbines to polar angles relative to the substation, partitions them in
 
 ## Algorithm Suite
 
-Ten metaheuristic algorithms are implemented as interchangeable solvers. All use the same chromosome encoding (a set of *M* distinct candidate-point indices), the same evaluation pipeline, and the same initial population.
+Important Note on Baselines: The baseline algorithms included in this repository are provided for research comparison and reproducibility purposes only. Unless explicitly stated, they are not official implementations released by the original authors. For the exact algorithm definitions, operator designs, parameter settings, initialization schemes, constraint-handling strategies, and experimental configurations, readers should always refer to the corresponding original publications. If any discrepancy exists between the code in this repository and the descriptions in the original papers, the original papers shall prevail. Please also cite the original references of the corresponding methods when using these implementations in your research. Ten metaheuristic algorithms are implemented as interchangeable solvers. All use the same chromosome encoding (a set of *M* distinct candidate-point indices), the same evaluation pipeline, and the same initial population.
 
 | Algorithm | Category | Key Mechanism | Reference |
 |:----------|:---------|:--------------|:----------|
