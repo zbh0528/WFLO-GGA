@@ -703,10 +703,6 @@ This benchmark uses exclusively public, verifiable data:
 | Cable cost parameters | [Kirchner-Bossi & Porté-Agel (2024)](https://doi.org/10.1016/j.renene.2023.119524) | |
 ```
 
----
-
-## Citation
-
 If you use this platform, dataset, or any algorithm implementation in your research, please cite:
 
 ```bibtex
