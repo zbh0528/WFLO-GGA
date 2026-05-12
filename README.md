@@ -14,6 +14,23 @@
 
 </div>
 
+## Citation 
+If you use this platform, dataset, or any algorithm implementation in your research, please cite:
+
+```bibtex
+@article{ZHANG2026127895,
+title = {A geometry-guided genetic algorithm for integrated offshore wind farm layout and electrical cable routing optimization},
+journal = {Applied Energy},
+volume = {415},
+pages = {127895},
+year = {2026},
+issn = {0306-2619},
+doi = {https://doi.org/10.1016/j.apenergy.2026.127895},
+url = {https://www.sciencedirect.com/science/article/pii/S0306261926005477},
+author = {Baohang Zhang and Yixin Shao and Zhenyu Lei and Chao Zhang and Yirui Wang and Shangce Gao}
+}
+```
+
 ---
 
 ## Table of Contents
@@ -701,23 +718,6 @@ This benchmark uses exclusively public, verifiable data:
 | CAPEX cost coefficients | [Dicorato et al. (2011)](https://doi.org/10.1016/j.renene.2011.01.003); [Gonzalez-Rodriguez (2017)](https://doi.org/10.1016/j.esd.2016.12.001) | |
 | OPEX benchmark value (86 $/kW/year) | [NREL 2018 Cost of Wind Energy Review](https://www.nrel.gov/docs/fy18osti/72167.pdf) | |
 | Cable cost parameters | [Kirchner-Bossi & Porté-Agel (2024)](https://doi.org/10.1016/j.renene.2023.119524) | |
-```
-
-If you use this platform, dataset, or any algorithm implementation in your research, please cite:
-
-```bibtex
-@article{ZHANG2026127895,
-title = {A geometry-guided genetic algorithm for integrated offshore wind farm layout and electrical cable routing optimization},
-journal = {Applied Energy},
-volume = {415},
-pages = {127895},
-year = {2026},
-issn = {0306-2619},
-doi = {https://doi.org/10.1016/j.apenergy.2026.127895},
-url = {https://www.sciencedirect.com/science/article/pii/S0306261926005477},
-author = {Baohang Zhang and Yixin Shao and Zhenyu Lei and Chao Zhang and Yirui Wang and Shangce Gao}
-}
-```
 
 ---
 
